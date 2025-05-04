@@ -1,4 +1,6 @@
 from pydantic import BaseModel, EmailStr
+from pydantic.types import UUID
+
 
 class UserBase(BaseModel):
     username: str
@@ -8,4 +10,13 @@ class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
-    id: str
+    id: UUID
+
+class UserLogin(BaseModel):
+    email: EmailStr | None
+    username: str | None
+    password: str
+
+
+# class Issue(BaseModel):
+#     user_id: UUID
