@@ -10,9 +10,12 @@ class User(Base):
     username = Column(String, unique=True, nullable=False)
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
-    is_admin = Column(Boolean, default=False)
+    role = Column(String, default=False)
     rating = Column(Integer, default=0)
     created_at = Column(TIMESTAMP, server_default=func.now(), nullable=False)
+    token = Column(UUID, nullable=False)
+    email_verify = Column(Boolean, nullable=False)
+    verify_token = Column(UUID, nullable=False)
 
 
 class Issue(Base):

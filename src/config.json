@@ -1,3 +1,6 @@
 {
-  "DATABASE_URL": ""
+  "DOMAIN": "",
+  "DATABASE_URL": "",
+  "EMAIL": "",
+  "EMAIL_PASSWORD": ""
 }
