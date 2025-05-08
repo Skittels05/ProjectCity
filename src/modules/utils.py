@@ -6,4 +6,4 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(possible_password: str, hashed_password: str) -> bool:
     """Функция для проверки соответствия возможного пароля и хэша"""
-    return sha256(possible_password.encode()) == hashed_password
+    return sha256(possible_password.encode()).hexdigest() == hashed_password

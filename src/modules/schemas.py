@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr
 from pydantic.types import UUID
 
 
+# Пользовательские классы
 class UserBase(BaseModel):
     username: str
     email: EmailStr
@@ -20,21 +21,31 @@ class UserLogin(BaseModel):
     username: str | None
     password: str
 
-
 class VerifyEmail(BaseModel):
-    token: str
+    token: UUID
+
+class ChangePassword(BaseModel):
+    token: UUID
+    old_password: str
+    new_password: str
 
 
+# Классы проблем
 class IssueCreate(BaseModel):
-    user_id: UUID
+    token: UUID
     type: str
     short_desc: str
     full_desc: str
     address: str
 
-class Issue(IssueCreate):
+class Issue(BaseModel):
     id: UUID
+    user_id: UUID
     status: str
+    type: str
+    short_desc: str
+    full_desc: str
+    address: str
 
 class IssueUpdate(BaseModel):
     id: UUID
@@ -43,4 +54,10 @@ class IssueUpdate(BaseModel):
 
 class IssueDelete(BaseModel):
     id: UUID
+    token: UUID
+
+class IssuesField(BaseModel):
+    type: str
+
+class IssuesFieldCreate(IssuesField):
     token: UUID

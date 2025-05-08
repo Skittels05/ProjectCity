@@ -1,6 +1,8 @@
 {
-  "DOMAIN": "",
-  "DATABASE_URL": "",
-  "EMAIL": "",
-  "EMAIL_PASSWORD": ""
+  "DOMAIN": "example.com",
+  "DATABASE_URL": "postgresql://user:password@example",
+  "EMAIL_DOMAIN": "smtp.example.com",
+  "EMAIL_PORT": 587,
+  "EMAIL": "noreply@example.com",
+  "EMAIL_PASSWORD": "password"
 }

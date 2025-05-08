@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, UUID, Boolean, TIMESTAMP, func
 from .database import Base
-import datetime
 
 
 class User(Base):
@@ -28,3 +27,9 @@ class Issue(Base):
     full_desc = Column(String, nullable=False)
     status = Column(String, nullable=False)
     address = Column(String, nullable=False)
+
+
+class IssuesField(Base):
+    __tablename__ = "issues_field"
+
+    type = Column(String, nullable=False, unique=True, primary_key=True)
