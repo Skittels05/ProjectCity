@@ -33,3 +33,8 @@ class IssuesField(Base):
     __tablename__ = "issues_field"
 
     type = Column(String, nullable=False, unique=True, primary_key=True)
+
+class Roles(Base):
+    __tablename__ = "roles"
+
+    role = Column(String, nullable=False, unique=True, primary_key=True)

@@ -54,6 +54,8 @@ def get_issue_by_id(db: Session, issue_id: UUID):
     """Получение проблемы по его ID"""
     return db.query(models.Issue).filter(models.Issue.id == issue_id).first()
 
+
+# Работа со статистикой
 def get_statistics_issue_type(db: Session) -> list[dict]:
     """Получение списка статистики по типам проблем"""
     statistics_list = []
@@ -80,6 +82,12 @@ def get_statistics_issue_status(db: Session) -> list[dict]:
             }
         )
     return statistics_list
+
+
+# Работа с ролями
+def get_all_roles(db: Session):
+    """Функция для получения всех ролей"""
+    return db.query(models.Roles)
 
 
 # Создание полей
@@ -130,6 +138,16 @@ def create_issues_field(db: Session, issues_field: schemas.IssuesField):
     db.refresh(db_issues_field)
     return db_issues_field
 
+def create_role(db: Session, role: schemas.RoleCreate):
+    """Создание новой роли"""
+    db_role = models.Roles(
+        role=role.role
+    )
+    db.add(db_role)
+    db.commit()
+    db.refresh(db_role)
+    return db_role
+
 
 # Изменение полей
 def update_user_verify_token(db: Session, user_id: UUID):
@@ -164,6 +182,14 @@ def user_change_password(db: Session, new_password: str, token: UUID = None, ver
     db.refresh(db_user)
     return db_user
 
+def change_role(db: Session, user_id: UUID, role: str):
+    """Изменение роли у пользователя по его ID"""
+    db_user = get_user_by_id(db=db, user_id=user_id)
+    db_user.role = role
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
 def update_issue(db: Session, issue: schemas.IssueUpdate):
     """Обновление поля статуса"""
     db_issue = get_issue_by_id(db=db, issue_id=issue.id)
@@ -172,6 +198,13 @@ def update_issue(db: Session, issue: schemas.IssueUpdate):
     db.commit()
     db.refresh(db_issue)
     return db_issue
+
+def delete_user(db: Session, user_id: UUID):
+    """Функция удаления пользователя по его ID"""
+    db_user = get_user_by_id(db=db, user_id=user_id)
+    db.delete(db_user)
+    db.commit()
+    return 200
 
 def delete_issue(db: Session, issue: schemas.IssueDelete):
     """Удаление проблемы из БД"""

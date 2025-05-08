@@ -21,6 +21,10 @@ class UserLogin(BaseModel):
     username: str | None
     password: str
 
+class UserDelete(BaseModel):
+    id: UUID
+    token: UUID
+
 class VerifyEmail(BaseModel):
     token: UUID
 
@@ -28,6 +32,18 @@ class ChangePassword(BaseModel):
     token: UUID
     old_password: str
     new_password: str
+
+class ChangeRole(BaseModel):
+    user_id: UUID
+    token: UUID
+    role: str
+
+class RoleCreate(BaseModel):
+    token: UUID
+    role: str
+
+class Role(BaseModel):
+    role: str
 
 
 # Классы проблем

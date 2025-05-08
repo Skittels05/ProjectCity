@@ -47,13 +47,26 @@ async def login_for_token(user: schemas.UserLogin, db: Session = Depends(get_db)
 @app.post("/api/v1/user/register", response_model=schemas.User)
 async def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Регистрация пользователя в системе"""
-    db_user = crud.get_user_by_email(db, email=user.email)
+    db_user = crud.get_user_by_email(db=db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email уже занят")
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Имя пользователя уже занято")
     return crud.create_user(db=db, user=user)
+
+@app.delete("/api/v1/user")
+async def delete_user(request: schemas.UserDelete, db: Session = Depends(get_db)):
+    """Удаление пользователя по его ID через токен администратора"""
+    db_user = crud.get_user_by_token(db=db, token=request.token)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Пользователь не найден")
+    if db_user.role != "admin":
+        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    db_user = crud.get_user_by_id(db=db, user_id=request.id)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Удаляемого пользователя не существует")
+    return crud.delete_user(db=db, user_id=request.id)
 
 @app.post("/api/v1/user/verify-email", response_model=schemas.User)
 async def verify_email(request: schemas.VerifyEmail, db: Session = Depends(get_db)):
@@ -96,6 +109,38 @@ async def reset_password(verify_token: UUID, new_password: str, db: Session = De
     if db_user is None:
         raise HTTPException(status_code=400, detail="Неверный токен")
     return crud.user_change_password(db=db, verify_token=verify_token, new_password=new_password)
+
+
+# Работа с ролями
+@app.post("/api/v1/user/change-role", response_model=schemas.User)
+async def change_role(request: schemas.ChangeRole, db: Session = Depends(get_db)):
+    """Смена роли пользователя по его ID"""
+    db_user = crud.get_user_by_token(db=db, token=request.token)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Пользователь не найден")
+    if db_user.role != "admin":
+        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    db_user = crud.get_user_by_id(db=db, user_id=request.user_id)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Изменяемый пользователь не найден")
+    db_roles = crud.get_all_roles(db=db).filter(models.Roles.role == request.role).first()
+    if db_roles is None:
+        raise HTTPException(status_code=400, detail="Роли не существует")
+    return crud.change_role(db=db, user_id=request.user_id, role=request.role)
+
+@app.post("/api/v1/user/create-role", response_model=schemas.Role)
+async def role_create(role: schemas.RoleCreate, db: Session = Depends(get_db)):
+    """Создание новой роли"""
+    db_user = crud.get_user_by_token(db=db, token=role.token)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Пользователь не найден")
+    if db_user.role != "admin":
+        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    db_roles = crud.get_all_roles(db=db).filter(models.Roles.role == role.role).first()
+    if not(db_roles is None):
+        raise HTTPException(status_code=400, detail="Роль уже существует")
+    return crud.create_role(db=db, role=role)
+
 
 
 # Работа с проблемами
