@@ -29,6 +29,24 @@ def get_user_by_verify_token(db: Session, verify_token: UUID):
     """Получение класса пользователя по подтверждающему токену"""
     return db.query(models.User).filter(models.User.verify_token == verify_token).first()
 
+def get_all_users(db: Session):
+    """Функция для получения списка всех пользователей"""
+    users_data =[]
+    users = db.query(models.User).all()
+    for user in users:
+        users_data.append(
+            {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "role": user.role,
+                "rating": user.rating,
+                "created_at": user.created_at,
+                "email_verify": user.email_verify
+            }
+        )
+    return users_data
+
 def update_user_token(db: Session, user_id: UUID):
     """Обновление токена пользователя по его ID"""
     db_user = get_user_by_id(db=db, user_id=user_id)
@@ -91,7 +109,7 @@ def get_all_roles(db: Session):
 
 
 # Создание полей
-def create_user(db: Session, user: schemas.UserCreate) -> models.User:
+async def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     """Создание поля нового пользователя по его классу"""
     hashed_password = get_password_hash(user.password)
     db_user = models.User(
@@ -109,7 +127,7 @@ def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    email.send_verification_email(db_user.email, db_user.verify_token)
+    await email.send_verification_email(db_user.email, db_user.verify_token)
     return db_user
 
 def create_issue(db: Session, issue: schemas.IssueCreate) -> models.Issue:
@@ -190,12 +208,18 @@ def change_role(db: Session, user_id: UUID, role: str):
     db.refresh(db_user)
     return db_user
 
-def update_issue(db: Session, issue: schemas.IssueUpdate):
+async def update_issue(db: Session, issue: schemas.IssueUpdate):
     """Обновление поля статуса"""
     db_issue = get_issue_by_id(db=db, issue_id=issue.id)
+    db_user = get_user_by_id(db=db, user_id=db_issue.user_id)
+    if issue.status == STATUSES[2] and db_issue.status != issue.status and not(db_user is None):
+        db_user.rating += 1
     db_issue.status = issue.status
-    email.send_notification_status(email=get_user_by_id(db=db, user_id=db_issue.user_id).email, issue=db_issue)
     db.commit()
+    if not(db_user is None):
+        await email.send_notification_status(email=get_user_by_id(db=db, user_id=db_issue.user_id).email, issue=db_issue)
+    if not(db_user is None):
+        db.refresh(db_user)
     db.refresh(db_issue)
     return db_issue
 

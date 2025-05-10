@@ -1,13 +1,13 @@
-import smtplib
+import aiosmtplib
 from email.mime.text import MIMEText
+from shutil import which
+
 from pydantic.types import UUID
 from .config import config_values
 from .schemas import Issue
 
-def send_verification_email(email: str, token: str):
+async def send_verification_email(email: str, token: str):
     """Функция для отправки письма для подтверждения почты"""
-    server = smtplib.SMTP(config_values.EMAIL_DOMAIN, config_values.EMAIL_PORT)
-    server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
     verification_url = f"https://{config_values.DOMAIN}/api/v1/user/verify-email?token={token}"
     message = MIMEText(
         f"Для подтверждения email перейдите по ссылке: {verification_url}",
@@ -17,13 +17,15 @@ def send_verification_email(email: str, token: str):
     message["Subject"] = "Подтверждение регистрации"
     message["From"] = config_values.EMAIL
     message["To"] = email
-    server.send_message(message)
-    server.close()
+    async with aiosmtplib.SMTP(
+        hostname=config_values.EMAIL_DOMAIN,
+        port=config_values.EMAIL_PORT
+    ) as server:
+        await server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
+        await server.send_message(message)
 
-def send_notification_status(email: str, issue: Issue):
+async def send_notification_status(email: str, issue: Issue):
     """Отправка уведомления об изменении статуса проблемы"""
-    server = smtplib.SMTP(config_values.EMAIL_DOMAIN, config_values.EMAIL_PORT)
-    server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
     message = MIMEText(
         f'Статус проблемы "{issue.type}" по адресу {issue.address} изменён на {issue.status}',
         'plain',
@@ -32,13 +34,15 @@ def send_notification_status(email: str, issue: Issue):
     message["Subject"] = "Изменён статус вашей проблемы"
     message["From"] = config_values.EMAIL
     message["To"] = email
-    server.send_message(message)
-    server.close()
+    async with aiosmtplib.SMTP(
+        hostname=config_values.EMAIL_DOMAIN,
+        port=config_values.EMAIL_PORT
+    ) as server:
+        await server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
+        await server.send_message(message)
 
-def reset_password_message(email: str, verify_token: UUID):
+async def reset_password_message(email: str, verify_token: UUID):
     """Отправка письма о сбросе пароля"""
-    server = smtplib.SMTP(config_values.EMAIL_DOMAIN, config_values.EMAIL_PORT)
-    server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
     message = MIMEText(
         f'Отправлен запрос на сброс пароля, если это были вы, то перейдите по ссылке: '
         f'https://{config_values.DOMAIN}/api/v1/user/reset-password?token={verify_token}',
@@ -48,6 +52,10 @@ def reset_password_message(email: str, verify_token: UUID):
     message["Subject"] = "Сброс пароля"
     message["From"] = config_values.EMAIL
     message["To"] = email
-    server.send_message(message)
-    server.close()
+    async with aiosmtplib.SMTP(
+        hostname=config_values.EMAIL_DOMAIN,
+        port=config_values.EMAIL_PORT
+    ) as server:
+        await server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
+        await server.send_message(message)
     return 200

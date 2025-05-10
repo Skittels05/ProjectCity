@@ -15,6 +15,7 @@ class Config:
             self.config_loaded = load(file)
         self.DOMAIN = self.config_loaded.get("DOMAIN", None)
         self.DATABASE_URL = self.config_loaded.get("DATABASE_URL", None)
+        self.REDIS_URL = self.config_loaded.get("REDIS_URL", None)
         self.EMAIL_DOMAIN = self.config_loaded.get("EMAIL_DOMAIN", None)
         self.EMAIL_PORT = self.config_loaded.get("EMAIL_PORT", None)
         self.EMAIL = self.config_loaded.get("EMAIL", None)
@@ -26,6 +27,8 @@ if config_values.DOMAIN is None:
     raise ValueError("В файле конфигурации не обнаружено домена!!!")
 if config_values.DATABASE_URL is None:
     raise ValueError("В файле конфигурации не обнаружено ссылки на базу данных!!!")
+if config_values.REDIS_URL is None:
+    raise ValueError("В файле конфигурации не обнаружено ссылки на БД для кэша (Redis)")
 if config_values.EMAIL_DOMAIN is None:
     raise ValueError("В файле конфигурации не обнаружено домена сервера email!!!")
 if config_values.EMAIL_PORT is None:

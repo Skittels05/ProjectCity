@@ -1,22 +1,35 @@
-from uuid import uuid4
+import json
+from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache import FastAPICache, coder
+from fastapi_cache.decorator import cache
+from fastapi_cache.coder import PickleCoder
 from fastapi_limiter.depends import RateLimiter
-# from fastapi_cache.decorator import cache
 from fastapi.middleware.cors import CORSMiddleware
+from redis import asyncio as aioredis
 from pydantic import EmailStr
 from pydantic.types import UUID
 from sqlalchemy.orm import Session
 from typing_extensions import Optional
 
 from . import models, schemas, crud, utils
+from .config import config_values
 from .email import reset_password_message
-from .crud import update_user_email_verify
 from .database import SessionLocal
 
 
-app = FastAPI()
-
+class CacheCoder(coder.Coder):
+    @classmethod
+    def encode(cls, value: Any) -> bytes:
+        return json.dumps(value).encode('utf-8')
+    @classmethod
+    def decode(cls, value: bytes) -> Any:
+        if isinstance(value, bytes):
+            return json.loads(value.decode('utf-8'))
+        return json.loads(value)
 
 def get_db():
     db = SessionLocal()
@@ -25,9 +38,29 @@ def get_db():
     finally:
         db.close()
 
+def admin_check(db: Session, token: UUID):
+    """Проверка является ли пользователь администратором"""
+    db_user = crud.get_user_by_token(db=db, token=token)
+    if db_user is None:
+        raise HTTPException(status_code=400, detail="Пользователь не найден")
+    if db_user.role != "admin":
+        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+
+
+# Цикл работы
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    redis = aioredis.from_url(config_values.REDIS_URL, encoding="utf8", decode_responses=True)
+    FastAPICache.init(RedisBackend(redis), prefix="project-city", coder=CacheCoder)
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+
 
 # Работа с пользователями
 @app.post("/api/v1/user/login", response_model=schemas.User)
+@cache(expire=20)
 async def login_for_token(user: schemas.UserLogin, db: Session = Depends(get_db)):
     """Получение токена пользователя, для совершения действий с API"""
     if not(user.email is None):
@@ -53,16 +86,18 @@ async def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_username(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Имя пользователя уже занято")
-    return crud.create_user(db=db, user=user)
+    return await crud.create_user(db=db, user=user)
+
+@app.post("/api/v1/user", response_model=list[dict])
+async def users_list(request: schemas.Request, db: Session = Depends(get_db)):
+    """Получение списка пользователей"""
+    admin_check(db=db, token=request.token)
+    return crud.get_all_users(db=db)
 
 @app.delete("/api/v1/user")
 async def delete_user(request: schemas.UserDelete, db: Session = Depends(get_db)):
     """Удаление пользователя по его ID через токен администратора"""
-    db_user = crud.get_user_by_token(db=db, token=request.token)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Пользователь не найден")
-    if db_user.role != "admin":
-        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    admin_check(db=db, token=request.token)
     db_user = crud.get_user_by_id(db=db, user_id=request.id)
     if db_user is None:
         raise HTTPException(status_code=400, detail="Удаляемого пользователя не существует")
@@ -96,7 +131,7 @@ async def forgot_password(email: EmailStr, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email не занят")
     if not(db_user.email_verify):
         raise HTTPException(status_code=400, detail="Аккаунт не активирован")
-    return reset_password_message(email=email, verify_token=db_user.verify_token)
+    return await reset_password_message(email=email, verify_token=db_user.verify_token)
 
 @app.post("/api/v1/user/reset-password", response_model=schemas.User)
 async def reset_password(verify_token: UUID, new_password: str, db: Session = Depends(get_db)):
@@ -115,11 +150,7 @@ async def reset_password(verify_token: UUID, new_password: str, db: Session = De
 @app.post("/api/v1/user/change-role", response_model=schemas.User)
 async def change_role(request: schemas.ChangeRole, db: Session = Depends(get_db)):
     """Смена роли пользователя по его ID"""
-    db_user = crud.get_user_by_token(db=db, token=request.token)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Пользователь не найден")
-    if db_user.role != "admin":
-        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    admin_check(db=db, token=request.token)
     db_user = crud.get_user_by_id(db=db, user_id=request.user_id)
     if db_user is None:
         raise HTTPException(status_code=400, detail="Изменяемый пользователь не найден")
@@ -131,16 +162,11 @@ async def change_role(request: schemas.ChangeRole, db: Session = Depends(get_db)
 @app.post("/api/v1/user/create-role", response_model=schemas.Role)
 async def role_create(role: schemas.RoleCreate, db: Session = Depends(get_db)):
     """Создание новой роли"""
-    db_user = crud.get_user_by_token(db=db, token=role.token)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Пользователь не найден")
-    if db_user.role != "admin":
-        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    admin_check(db=db, token=role.token)
     db_roles = crud.get_all_roles(db=db).filter(models.Roles.role == role.role).first()
     if not(db_roles is None):
         raise HTTPException(status_code=400, detail="Роль уже существует")
     return crud.create_role(db=db, role=role)
-
 
 
 # Работа с проблемами
@@ -170,23 +196,19 @@ async def issue_status(issue: schemas.IssueUpdate, db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Пользователь не является администратором")
     if not(issue.status in crud.STATUSES):
         raise HTTPException(status_code=400, detail="Статуса не существует")
-    return crud.update_issue(db=db, issue=issue)
+    return await crud.update_issue(db=db, issue=issue)
 
 @app.delete("/api/v1/issue/delete")
 async  def issue_delete(issue: schemas.IssueDelete, db: Session = Depends(get_db)):
     """Удаление проблемы"""
-    db_user = crud.get_user_by_token(db=db, token=issue.token)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Пользователь не найден")
+    admin_check(db=db, token=issue.token)
     db_issue = crud.get_issue_by_id(db=db, issue_id=issue.id)
     if db_issue is None:
         raise HTTPException(status_code=400, detail="Проблема не найдена")
-    if db_user.role != "admin":
-        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
     return crud.delete_issue(db=db, issue=issue)
 
 @app.post("/api/v1/issue/find")
-# @cache(expire=60)
+@cache(expire=20)
 async def issue_find(
         issue_id: Optional[UUID] = None,
         user_id: Optional[UUID] = None,
@@ -195,6 +217,7 @@ async def issue_find(
         full_desc: Optional[str] = None,
         status: Optional[str] = None,
         address: Optional[str] = None,
+        page: Optional[int] = None,
         db: Session = Depends(get_db)
 ):
     """Поиск проблемы по её параметрам"""
@@ -213,21 +236,31 @@ async def issue_find(
         query = query.filter(models.Issue.status == status)
     if address:
         query = query.filter(models.Issue.address == address)
-    return query.all()
+    if page is None:
+        page = 1
+    return query.limit(50).offset(page).all()
 
-@app.get("/api/v1/issue/types")
+@app.get("/api/v1/issue/amount", response_model=int)
+@cache(expire=20)
+async def issues_amount(db: Session = Depends(get_db)):
+    """Получение общего количества проблем"""
+    return len(crud.get_all_issues(db=db).all())
+
+@app.get("/api/v1/issue/types", response_model=list[dict])
+@cache(expire=20)
 async def all_issues_types(db: Session = Depends(get_db)):
     """Получение списка всех типов проблем"""
-    return crud.get_all_issues_types(db=db).all()
+    issues_type_list = []
+    for issues_type in crud.get_all_issues_types(db=db).all():
+        issues_type_list.append({
+            "type": issues_type.type
+        })
+    return issues_type_list
 
 @app.post("/api/v1/issue/types")
 async def issues_types_create(issues_field: schemas.IssuesFieldCreate, db: Session = Depends(get_db)):
     """Создание нового типа проблем"""
-    db_user = crud.get_user_by_token(db=db, token=issues_field.token)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Пользователь не найден")
-    if db_user.role != "admin":
-        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    admin_check(db=db, token=issues_field.token)
     db_issues_types = crud.get_all_issues_types(db=db).filter(models.IssuesField.type == issues_field.type).first()
     if db_issues_types:
         raise HTTPException(status_code=400, detail="Тип проблемы уже существует")
@@ -236,22 +269,20 @@ async def issues_types_create(issues_field: schemas.IssuesFieldCreate, db: Sessi
 @app.delete("/api/v1/issue/types")
 async def issues_type_delete(issues_field: schemas.IssuesFieldCreate, db: Session = Depends(get_db)):
     """Удаление типа проблем"""
-    db_user = crud.get_user_by_token(db=db, token=issues_field.token)
-    if db_user is None:
-        raise HTTPException(status_code=400, detail="Пользователь не найден")
-    if db_user.role != "admin":
-        raise HTTPException(status_code=400, detail="Пользователь не является администратором")
+    admin_check(db=db, token=issues_field.token)
     db_issues_types = crud.get_all_issues_types(db=db).filter(models.IssuesField.type == issues_field.type).first()
     return crud.delete_issues_type(db=db, issues_field=db_issues_types)
 
 
 # Работа со статистикой
 @app.get("/api/v1/statistics/types")
+@cache(expire=20)
 async def get_statistics_types(db: Session = Depends(get_db)):
     """Получение статистики о проблемах по его типу"""
     return crud.get_statistics_issue_type(db=db)
 
 @app.get("/api/v1/statistics/status")
+@cache(expire=20)
 async def get_statistics_status(db: Session = Depends(get_db)):
     """Получение статистики о проблемах по его статусу"""
     return crud.get_statistics_issue_status(db=db)
