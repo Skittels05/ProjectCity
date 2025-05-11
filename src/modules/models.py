@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, UUID, Boolean, TIMESTAMP, func
+from sqlalchemy import Column, Integer, String, UUID, Boolean, TIMESTAMP, func, Float
 from .database import Base
 
 
@@ -27,6 +27,10 @@ class Issue(Base):
     full_desc = Column(String, nullable=False)
     status = Column(String, nullable=False)
     address = Column(String, nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    created_at = Column(TIMESTAMP, nullable=False)
+    updated_at = Column(TIMESTAMP, nullable=False)
 
 
 class IssuesField(Base):

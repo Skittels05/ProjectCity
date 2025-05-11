@@ -31,21 +31,7 @@ def get_user_by_verify_token(db: Session, verify_token: UUID):
 
 def get_all_users(db: Session):
     """Функция для получения списка всех пользователей"""
-    users_data =[]
-    users = db.query(models.User).all()
-    for user in users:
-        users_data.append(
-            {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "role": user.role,
-                "rating": user.rating,
-                "created_at": user.created_at,
-                "email_verify": user.email_verify
-            }
-        )
-    return users_data
+    return db.query(models.User)
 
 def update_user_token(db: Session, user_id: UUID):
     """Обновление токена пользователя по его ID"""
@@ -62,6 +48,7 @@ def is_activated(db: Session, user_id: UUID) -> bool:
 
 # Работа с проблемами
 def get_all_issues_types(db: Session):
+    """Получение всех типов проблем"""
     return db.query(models.IssuesField)
 
 def get_all_issues(db: Session):
@@ -132,6 +119,7 @@ async def create_user(db: Session, user: schemas.UserCreate) -> models.User:
 
 def create_issue(db: Session, issue: schemas.IssueCreate) -> models.Issue:
     """Создание поля новой проблемы по его классу"""
+    time_now = datetime.now()
     db_issue = models.Issue(
         id=uuid4(),
         user_id=get_user_by_token(db=db, token=issue.token).id,
@@ -139,7 +127,11 @@ def create_issue(db: Session, issue: schemas.IssueCreate) -> models.Issue:
         short_desc=issue.short_desc,
         full_desc=issue.full_desc,
         status=STATUSES[0],
-        address=issue.address
+        address=issue.address,
+        latitude=issue.latitude,
+        longitude=issue.longitude,
+        created_at=time_now,
+        updated_at=time_now
     )
     db.add(db_issue)
     db.commit()
@@ -215,6 +207,7 @@ async def update_issue(db: Session, issue: schemas.IssueUpdate):
     if issue.status == STATUSES[2] and db_issue.status != issue.status and not(db_user is None):
         db_user.rating += 1
     db_issue.status = issue.status
+    db_issue.updated_at = datetime.now()
     db.commit()
     if not(db_user is None):
         await email.send_notification_status(email=get_user_by_id(db=db, user_id=db_issue.user_id).email, issue=db_issue)

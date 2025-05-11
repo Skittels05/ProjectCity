@@ -1,4 +1,7 @@
 from hashlib import sha256
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).parent.parent
 
 def get_password_hash(password: str) -> str:
     """Функция по получению хэша из пароля"""
@@ -26,3 +29,7 @@ def print_logo():
                  |__/                             |___/                      
         """
     )
+
+def get_api_doc(path: str) -> str:
+    """Функция для получения документации из папки api_docs"""
+    return (SCRIPT_DIR / path).read_text(encoding="UTF-8")

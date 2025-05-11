@@ -1,11 +1,11 @@
 from locust import HttpUser, task, between
 from json import load, loads
-from random import choice
+from random import choice, random, randint
 from users_generator import random_password
 
 DOMAIN = "http://localhost:8000"
 PROBLEMS = ['string1', 'string']
-ADMIN_TOKEN = "1f95f4f4-eb3a-456f-a7f2-cf60bb62190b"
+ADMIN_TOKEN = "e0cc4347-9d2b-4505-ab09-f0ccf46e3695"
 
 users = []
 
@@ -63,7 +63,7 @@ class ApiUserTest(HttpUser):
 
     @task
     def issue_get(self):
-        self.client.post(f"{DOMAIN}/api/v1/issue/find")
+        self.client.get(f"{DOMAIN}/api/v1/issue/find")
 
     @task
     def issue_amount(self):
@@ -73,21 +73,23 @@ class ApiUserTest(HttpUser):
     def issue_types(self):
         self.client.get(f"{DOMAIN}/api/v1/issue/types")
 
-    # @task
-    # def issue_create(self):
-    #     self.client.post(
-    #         f"{DOMAIN}/api/v1/issue/create", json={
-    #             "token": self.token,
-    #             "type": choice(PROBLEMS),
-    #             "short_desc": "dgfbjsbiooibsfbfsiobfoishoisfhobisdfhboifsdihpbsdfsbhoifpsbfdophbsdfhifdsfsdbfdsohibsdfpohibodfshisdfhibfdshbhssbdfhopbsdfsbpsdfohpssfdbfdbfdbfphbfsdbfdbsdhdfbshdbsfhibsfdhpdsbhbdsfphsbdfoihbspdf",
-    #             "full_desc": "dgfbjsbiooibsfbfsiobfoishoisfhobisdfhboifsdihpbsdfsbhoifpsbfdophbsdfhifdsfsdbfdsohibsdfpohibodfshisdfhibfdshbhssbdfhopbsdfsbpsdfohpssfdbfdbfdbfphbfsdbfdbsdhdfbshdbsfhibsfdhpdsbhbdsfphsbdfoihbspdf",
-    #             "address": "41539046893528-3582-09572935729-357235235234"
-    #         }
-    #     )
+    @task
+    def issue_create(self):
+        self.client.post(
+            f"{DOMAIN}/api/v1/issue/create", json={
+                "token": self.token,
+                "type": choice(PROBLEMS),
+                "short_desc": "dgfbjsbiooibsfbfsiobfoishoisfhobisdfhboifsdihpbsdfsbhoifpsbfdophbsdfhifdsfsdbfdsohibsdfpohibodfshisdfhibfdshbhssbdfhopbsdfsbpsdfohpssfdbfdbfdbfphbfsdbfdbsdhdfbshdbsfhibsfdhpdsbhbdsfphsbdfoihbspdf",
+                "full_desc": "dgfbjsbiooibsfbfsiobfoishoisfhobisdfhboifsdihpbsdfsbhoifpsbfdophbsdfhifdsfsdbfdsohibsdfpohibodfshisdfhibfdshbhssbdfhopbsdfsbpsdfohpssfdbfdbfdbfphbfsdbfdbsdhdfbshdbsfhibsfdhpdsbhbdsfphsbdfoihbspdf",
+                "address": "41539046893528-3582-09572935729-357235235234",
+                "latitude": f'{random() + randint(-89, 89): .15f}',
+                "longitude": f'{random() + randint(-179, 179): .15f}'
+            }
+        )
 
     @task
     def issue_status(self):
-        issues = loads(self.client.post(f"{DOMAIN}/api/v1/issue/find").text)
+        issues = loads(self.client.get(f"{DOMAIN}/api/v1/issue/find").text)
         if not(issues is None):
             self.client.post(
                 f'{DOMAIN}/api/v1/issue/status', json={
