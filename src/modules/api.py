@@ -1,7 +1,8 @@
 import json
 from contextlib import asynccontextmanager
 from typing import Any
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
+from fastapi.staticfiles import StaticFiles
 from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache import FastAPICache, coder
 from fastapi_cache.decorator import cache
@@ -12,6 +13,7 @@ from pydantic import EmailStr
 from pydantic.types import UUID
 from sqlalchemy.orm import Session
 from typing_extensions import Optional
+from pathlib import Path
 
 from . import models, schemas, crud, utils
 from .config import config_values
@@ -65,6 +67,9 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+static_path = Path(__file__).parent.parent / "uploads"
+app.mount(path="/static", app=StaticFiles(directory=str(static_path)), name="static")
+
 
 # Работа с пользователями
 @app.post(
@@ -76,7 +81,8 @@ app = FastAPI(
         200: {"description": "Успешная авторизация"},
         400: {"description": "Некорректные данные (например, логин или пароль не верный)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 async def login_for_token(user: schemas.UserLogin, db: Session = Depends(get_db)):
     """Получение токена пользователя, для совершения действий с API"""
@@ -103,7 +109,8 @@ async def login_for_token(user: schemas.UserLogin, db: Session = Depends(get_db)
         201: {"description": "Пользователь успешно создан"},
         400: {"description": "Некорректные данные (например, email уже занят)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 async def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Регистрация пользователя в системе"""
@@ -123,7 +130,8 @@ async def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     responses={
         200: {"description": "Список пользователей успешно получен"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 @cache(expire=20)
 async def users_list(
@@ -134,7 +142,7 @@ async def users_list(
     """Получение списка пользователей"""
     if page is None:
         page = 0
-    if amount is None:
+    if amount is None or amount > 20:
         amount = 20
     users_data = []
     for user in crud.get_all_users(db=db).limit(amount).offset(page * amount).all():
@@ -161,7 +169,8 @@ async def users_list(
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, токен администратора)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь", "Ограниченный доступ"]
 )
 async def delete_user(request: schemas.UserDelete, db: Session = Depends(get_db)):
     """Удаление пользователя по его ID через токен администратора"""
@@ -180,7 +189,8 @@ async def delete_user(request: schemas.UserDelete, db: Session = Depends(get_db)
         200: {"description": "Почта пользователя успешно подтверждена"},
         400: {"description": "Некорректные данные (например, секретный токен)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 async def verify_email(request: schemas.VerifyEmail, db: Session = Depends(get_db)):
     """Подтверждение email по токену подтверждения пользователя"""
@@ -198,7 +208,8 @@ async def verify_email(request: schemas.VerifyEmail, db: Session = Depends(get_d
         200: {"description": "Пароль успешно изменён"},
         400: {"description": "Некорректные данные (например, токен пользователя или пароль)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 async def change_user_password(request: schemas.ChangePassword, db: Session = Depends(get_db)):
     """Смена пользователем пароля на его аккаунте по токену"""
@@ -218,7 +229,8 @@ async def change_user_password(request: schemas.ChangePassword, db: Session = De
         200: {"description": "Письмо успешно отправлено"},
         400: {"description": "Некорректные данные или профиль пользователя не активирован (например, свободный email)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 async def forgot_password(email: EmailStr, db: Session = Depends(get_db)):
     """Отправка письма для восстановления пароля"""
@@ -240,7 +252,8 @@ async def forgot_password(email: EmailStr, db: Session = Depends(get_db)):
         200: {"description": "Пароль успешно изменён"},
         400: {"description": "Некорректные данные (например, секретный токен)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь"]
 )
 async def reset_password(verify_token: UUID, new_password: str, db: Session = Depends(get_db)):
     """Сброс пароля пользователя по секретному токену"""
@@ -265,7 +278,8 @@ async def reset_password(verify_token: UUID, new_password: str, db: Session = De
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, роли не существует в БД)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь", "Ограниченный доступ"]
 )
 async def change_role(request: schemas.ChangeRole, db: Session = Depends(get_db)):
     """Смена роли пользователя по его ID"""
@@ -288,7 +302,8 @@ async def change_role(request: schemas.ChangeRole, db: Session = Depends(get_db)
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, роль уже существует)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Пользователь", "Ограниченный доступ"]
 )
 async def role_create(role: schemas.RoleCreate, db: Session = Depends(get_db)):
     """Создание новой роли"""
@@ -298,21 +313,41 @@ async def role_create(role: schemas.RoleCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Роль уже существует")
     return crud.create_role(db=db, role=role)
 
+@app.get(
+    "/api/v1/user/issues-count",
+    response_model=int,
+    status_code=status.HTTP_200_OK,
+    summary="Количество проблем пользователя",
+    responses={
+        200: {"description": "Количество успешно получено"},
+        400: {"description": "Некорректные данные (например ID пользователя)"},
+        422: {"description": "Ошибка валидации"}
+    },
+    tags=["Проблемы"]
+)
+@cache(expire=20)
+async def get_user_issues_count(
+        user_id: UUID,
+        db: Session = Depends(get_db)
+):
+    """Получение общего числа проблем, созданных пользователем (хранящиеся в БД)"""
+    return crud.user_issues_count(db=db, user_id=user_id)
+
 
 # Работа с проблемами
 @app.post(
     "/api/v1/issue/create",
     response_model=schemas.Issue,
     status_code=status.HTTP_200_OK,
-    summary="Создание роли",
+    summary="Создание проблемы",
     responses={
-        200: {"description": "Роль успешно создана"},
-        403: {"description": "У пользователя недостаточно прав"},
-        400: {"description": "Некорректные данные (например, роль уже существует)"},
+        200: {"description": "Проблема успешно создана"},
+        400: {"description": "Некорректные данные (например, пользователь не активирован)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы"]
 )
-async def issue_create(issue: schemas.IssueCreate, db: Session = Depends(get_db)):
+async def issue_create(issue: schemas.IssueCreate = Depends(), files: list[UploadFile] = File(None), db: Session = Depends(get_db)):
     """Создание проблемы по токену автора, типу заявки, краткому описанию, подробному описанию и адресу"""
     db_user = crud.get_user_by_token(db=db, token=issue.token)
     if db_user is None:
@@ -322,7 +357,12 @@ async def issue_create(issue: schemas.IssueCreate, db: Session = Depends(get_db)
     db_issues_fields = crud.get_all_issues_types(db=db).filter(models.IssuesField.type == issue.type).first()
     if db_issues_fields is None:
         raise HTTPException(status_code=400, detail="Такого типа проблемы не существует")
-    return crud.create_issue(db=db, issue=issue)
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Слишком много файлов")
+    for file in files:
+        if file.size > 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Файл слишком большой")
+    return await crud.create_issue(db=db, issue=issue, files=files)
 
 @app.post(
     "/api/v1/issue/status",
@@ -334,7 +374,8 @@ async def issue_create(issue: schemas.IssueCreate, db: Session = Depends(get_db)
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, статуса не существует)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы", "Ограниченный доступ"]
 )
 async def issue_status(issue: schemas.IssueUpdate, db: Session = Depends(get_db)):
     """Обновление статуса проблемы по её ID и ID пользователя"""
@@ -360,7 +401,8 @@ async def issue_status(issue: schemas.IssueUpdate, db: Session = Depends(get_db)
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, проблемы не существует)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы", "Ограниченный доступ"]
 )
 async  def issue_delete(issue: schemas.IssueDelete, db: Session = Depends(get_db)):
     """Удаление проблемы"""
@@ -378,7 +420,8 @@ async  def issue_delete(issue: schemas.IssueDelete, db: Session = Depends(get_db
     responses={
         200: {"description": "Результат поисков проблем получен"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы"]
 )
 @cache(expire=20)
 async def issue_find(
@@ -411,7 +454,7 @@ async def issue_find(
         query = query.filter(models.Issue.address == address)
     if page is None:
         page = 0
-    if amount is None:
+    if amount is None or amount > 50:
         amount = 50
     issues_list = []
     for issue in query.limit(amount).offset(page * amount).all():
@@ -438,7 +481,8 @@ async def issue_find(
     responses={
         200: {"description": "Количество получено"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы"]
 )
 @cache(expire=20)
 async def issues_amount(db: Session = Depends(get_db)):
@@ -453,7 +497,8 @@ async def issues_amount(db: Session = Depends(get_db)):
     responses={
         200: {"description": "Типы получены"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы"]
 )
 @cache(expire=20)
 async def all_issues_types(db: Session = Depends(get_db)):
@@ -475,7 +520,8 @@ async def all_issues_types(db: Session = Depends(get_db)):
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, тип уже существует)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы", "Ограниченный доступ"]
 )
 async def issues_types_create(issues_field: schemas.IssuesFieldCreate, db: Session = Depends(get_db)):
     """Создание нового типа проблем"""
@@ -495,7 +541,8 @@ async def issues_types_create(issues_field: schemas.IssuesFieldCreate, db: Sessi
         403: {"description": "У пользователя недостаточно прав"},
         400: {"description": "Некорректные данные (например, типа проблемы не существует)"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Проблемы", "Ограниченный доступ"]
 )
 async def issues_type_delete(issues_field: schemas.IssuesFieldCreate, db: Session = Depends(get_db)):
     """Удаление типа проблем"""
@@ -506,16 +553,56 @@ async def issues_type_delete(issues_field: schemas.IssuesFieldCreate, db: Sessio
     return crud.delete_issues_type(db=db, issues_field=db_issues_types)
 
 
+# Работа с изображениями
+@app.get(
+    "/api/v1/photos",
+    response_model=list[schemas.Photos],
+    summary="Получение ссылок на изображения",
+    responses={
+        200: {"description": "Ссылки успешно получены"},
+        422: {"description": "Ошибка валидации полей"}
+    },
+    tags=["Проблемы"]
+)
+@cache(expire=20)
+async def get_path_photos(
+        photo_id: Optional[UUID] = None,
+        issue_id: Optional[UUID] = None,
+        page: Optional[int] = None,
+        amount: Optional[int] = None,
+        db: Session = Depends(get_db)
+):
+    """Получение ссылок на изображения"""
+    query = crud.get_all_photos(db=db)
+    if photo_id:
+        query = query.filter(models.Photos.id == photo_id)
+    if issue_id:
+        query = query.filter(models.Photos.issue_id == issue_id)
+    if page is None:
+        page = 0
+    if amount is None or amount > 50:
+        amount = 50
+    photos_list = []
+    for photo in query.limit(amount).offset(page * amount).all():
+        photos_list.append({
+            "id": str(photo.id),
+            "issue_id": str(photo.issue_id),
+            "file_path": str(photo.file_path)
+        })
+    return photos_list
+
+
 # Работа со статистикой
 @app.get(
     "/api/v1/statistics/types",
-    # TODO Сделать модель для документации
+    response_model=list[schemas.StatisticTypes],
     status_code=status.HTTP_200_OK,
     summary="Статистика по типам проблем",
     responses={
         200: {"description": "Статистика получена"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Статистика"]
 )
 @cache(expire=20)
 async def get_statistics_types(db: Session = Depends(get_db)):
@@ -524,15 +611,62 @@ async def get_statistics_types(db: Session = Depends(get_db)):
 
 @app.get(
     "/api/v1/statistics/status",
-    # TODO Сделать модель для документации
+    response_model=list[schemas.StatisticStatus],
     status_code=status.HTTP_200_OK,
     summary="Статистика по статусам проблем",
     responses={
         200: {"description": "Статистика получена"},
         422: {"description": "Ошибка валидации полей"}
-    }
+    },
+    tags=["Статистика"]
 )
 @cache(expire=20)
 async def get_statistics_status(db: Session = Depends(get_db)):
     """Получение статистики о проблемах по его статусу"""
     return crud.get_statistics_issue_status(db=db)
+
+@app.get(
+    "/api/v1/statistics/time",
+    response_model=list[schemas.StatisticTime],
+    status_code=status.HTTP_200_OK,
+    summary="Статистика по времени",
+    responses={
+        200: {"description": "Статистика получена"},
+        422: {"description": "Ошибка валидации полей"}
+    },
+    tags=["Статистика"]
+)
+@cache(expire=300)
+async def get_statistics_time(db: Session = Depends(get_db)):
+    """Получение статистики о проблемах с сортировкой по времени"""
+    return crud.get_statistics_time(db=db)
+
+@app.get(
+    "/api/v1/statistics/area",
+    response_model=list[schemas.StatisticArea],
+    status_code=status.HTTP_200_OK,
+    summary="Статистика по местности",
+    responses={
+        200: {"description": "Статистика получена"},
+        422: {"description": "Ошибка валидации полей"}
+    },
+    tags=["Статистика"]
+)
+@cache(expire=300)
+async def get_statistics_area(db: Session = Depends(get_db)):
+    """Получение статистики о проблемах с сортировкой по местности"""
+    return crud.get_statistics_area(db=db)
+
+# Технические запросы
+@app.get(
+    "/api/health",
+    status_code=status.HTTP_200_OK,
+    summary="Проверка здоровья",
+    responses={
+        200: {"description": "Сервер здоров"}
+    },
+    tags=["Технические запросы"]
+)
+def health_check():
+    """Проверка здоровья сервера"""
+    return {"status": "healthy"}

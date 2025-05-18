@@ -1,9 +1,12 @@
 {
   "DOMAIN": "example.com",
+  "PORT": 8000,
+  "SSL_KEYFILE": "/path/to/certificate-key.pem",
+  "SSL_CERTFILE": "/path/to/certificate.pem",
   "DATABASE_URL": "postgresql://user:password@example",
   "REDIS_URL": "redis://localhost:6379",
   "EMAIL_DOMAIN": "smtp.example.com",
   "EMAIL_PORT": 587,
-  "EMAIL": "noreply@example.com",
+  "EMAIL": "noreply@localhost",
   "EMAIL_PASSWORD": "password"
 }

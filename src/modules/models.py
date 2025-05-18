@@ -42,3 +42,11 @@ class Roles(Base):
     __tablename__ = "roles"
 
     role = Column(String, nullable=False, unique=True, primary_key=True)
+
+class Photos(Base):
+    __tablename__ = "photos"
+
+    id = Column(UUID, primary_key=True, nullable=False)
+    issue_id = Column(UUID, nullable=False)
+    file_path = Column(String, nullable=False)
+    uploaded_at = Column(TIMESTAMP, nullable=False)

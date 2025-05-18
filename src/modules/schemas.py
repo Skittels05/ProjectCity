@@ -347,6 +347,73 @@ class IssuesFieldCreate(IssuesField):
     )
 
 
+class Photos(BaseModel):
+    id: UUID = Field(
+        default=...,
+        examples=["02de9a18-08e3-491e-b503-46434165a261"],
+        description="ID фото, указанный в форме UUID"
+    )
+    issue_id: UUID = Field(
+        default=...,
+        examples=["fd082294-4eba-404b-a40a-802614f0363b"],
+        description="ID проблемы, с которым связано фото, выраженный в UUID"
+    )
+    file_path: str = Field(
+        default=...,
+        examples=["/static/issues/fce00ccd-de10-4653-ae5d-262c32131b36.jpg"],
+        description="Ссылка на статическое изображение"
+    )
+
+
+class StatisticTypes(BaseModel):
+    type: str = Field(
+        default=...,
+        examples=["Яма на дороге", "Не работает свет в подъезде", "Водоснабжение"],
+        description="Тип возможной проблемы"
+    )
+    count: int = Field(
+        default=...,
+        examples=[534, 412],
+        description="Количество проблем"
+    )
+
+class StatisticStatus(BaseModel):
+    status: str = Field(
+        default=...,
+        examples=["есть проблема", "в обработке", "выполнено"],
+        description="Дата по которому делается подсчёт"
+    )
+    count: int = Field(
+        default=...,
+        examples=[534, 412],
+        description="Количество проблем"
+    )
+
+class StatisticTime(BaseModel):
+    time: str = Field(
+        default=...,
+        examples=[datetime.now().strftime("%d.%m.%Y")],
+        description="Дата дня по которому идёт подсчёт"
+    )
+    count: int = Field(
+        default=...,
+        examples=[534, 412],
+        description="Количество проблем"
+    )
+
+class StatisticArea(BaseModel):
+    name: str = Field(
+        default=...,
+        examples=["улица Ленина, 13, Смоленск, 214033"],
+        description="Адрес по которому идёт подсчёт"
+    )
+    count: int = Field(
+        default=...,
+        examples=[534, 412],
+        description="Количество проблем"
+    )
+
+
 class Request(BaseModel):
     token: UUID = Field(
         default=...,

@@ -1,12 +1,16 @@
 from uuid import uuid4
 from pydantic.types import UUID
 from sqlalchemy.orm import Session
-from datetime import datetime
+from sqlalchemy import func
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from . import models, schemas, email
 from .utils import get_password_hash
 
+static_path = Path(__file__).parent.parent / "uploads"
 STATUSES = ["есть проблема", "в обработке", "выполнено"]
+STATISTIC_DAYS = 30
 
 # Работа с пользователями
 def get_user_by_id(db: Session, user_id: UUID):
@@ -44,6 +48,10 @@ def update_user_token(db: Session, user_id: UUID):
 def is_activated(db: Session, user_id: UUID) -> bool:
     """Получение значения активации профиля"""
     return db.query(models.User).filter(models.User.id == user_id).first().email_verify
+
+def user_issues_count(db: Session, user_id: UUID) -> int:
+    """Получение значения всех проблем пользователя по его ID"""
+    return db.query(func.count(models.Issue.id)).filter(models.Issue.user_id == user_id).scalar()
 
 
 # Работа с проблемами
@@ -88,11 +96,45 @@ def get_statistics_issue_status(db: Session) -> list[dict]:
         )
     return statistics_list
 
+def get_statistics_time(db: Session) -> list[dict]:
+    """Получение списка статистики по времени"""
+    time_now = datetime.now()
+    time_30_day = datetime(year=time_now.year, month=time_now.month, day=time_now.day) - timedelta(days=STATISTIC_DAYS - 1)
+    statistics_list = []
+    db_issues = db.query(func.count(models.Issue.id))
+    for day in range(STATISTIC_DAYS):
+        statistics_list.append({
+            "time": str((time_30_day + timedelta(days=day)).strftime("%d.%m.%Y")),
+            "count": db_issues.filter(
+                models.Issue.created_at.between(time_30_day + timedelta(days=day), time_30_day + timedelta(days=day + 1))
+            ).scalar()
+        })
+    return statistics_list
+
+def get_statistics_area(db: Session) -> list[dict]:
+    result = []
+    areas = db.query(
+        models.Issue.address,
+        func.count(models.Issue.id).label("count")
+    ).group_by(models.Issue.address).all()
+    for item in areas:
+        result.append({
+            "name": item[0],
+            "count": item[1]
+        })
+    return result
+
 
 # Работа с ролями
 def get_all_roles(db: Session):
     """Функция для получения всех ролей"""
     return db.query(models.Roles)
+
+
+# Работа с изображениями
+def get_all_photos(db: Session):
+    """Функция для получения всех изображений"""
+    return db.query(models.Photos)
 
 
 # Создание полей
@@ -117,11 +159,12 @@ async def create_user(db: Session, user: schemas.UserCreate) -> models.User:
     await email.send_verification_email(db_user.email, db_user.verify_token)
     return db_user
 
-def create_issue(db: Session, issue: schemas.IssueCreate) -> models.Issue:
+async def create_issue(db: Session, issue: schemas.IssueCreate, files) -> models.Issue:
     """Создание поля новой проблемы по его классу"""
     time_now = datetime.now()
+    issue_id = uuid4()
     db_issue = models.Issue(
-        id=uuid4(),
+        id=issue_id,
         user_id=get_user_by_token(db=db, token=issue.token).id,
         type=issue.type,
         short_desc=issue.short_desc,
@@ -134,6 +177,21 @@ def create_issue(db: Session, issue: schemas.IssueCreate) -> models.Issue:
         updated_at=time_now
     )
     db.add(db_issue)
+    for file in files:
+        photo_id = uuid4()
+        file_ext = file.filename.split(".")[-1]
+        photo_filename = f"{str(photo_id)}.{file_ext}"
+        with open(str(static_path / "issues" / photo_filename), 'b+w') as buffer:
+            buffer.write(await file.read())
+        db_photo = models.Photos(
+            id=photo_id,
+            issue_id=issue_id,
+            file_path=f"/static/issues/{photo_filename}",
+            uploaded_at=time_now
+        )
+        db.add(db_photo)
+        db.commit()
+        db.refresh(db_photo)
     db.commit()
     db.refresh(db_issue)
     return db_issue
