@@ -1,12 +1,33 @@
 import aiosmtplib
+import smtplib
 from email.mime.text import MIMEText
-from shutil import which
+
 
 from pydantic.types import UUID
 from .config import config_values
 from .schemas import Issue
 
-async def send_verification_email(email: str, token: str):
+def smtp_check(host: str, port: int, email: str, use_tls: bool = True, auth: bool = None) -> bool:
+    try:
+        with smtplib.SMTP(host, port, timeout=0.5) as server:
+            server.ehlo()
+            if use_tls:
+                server.starttls()
+                server.ehlo()
+            if auth:
+                server.login(config_values.EMAIL, config_values.EMAIL_PASSWORD)
+            message = MIMEText("Это тестовое письмо, которое возникает при запуске API. Проверка работоспособности SMTP сервера.", 'plain', 'utf-8')
+            message["Subject"] = "SMTP Health Check"
+            message["From"] = email
+            message["To"] = email
+            server.send_message(message)
+            print("SMTP сервер работает корректно")
+            return True
+    except Exception as e:
+        print(f"SMTP подключение прервано: {str(e)}")
+        return False
+
+async def send_verification_email(email: str, token: str) -> None:
     """Функция для отправки письма для подтверждения почты"""
     verification_url = f"https://{config_values.DOMAIN}/api/v1/user/verify-email?token={token}"
     message = MIMEText(

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import models, schemas, crud, utils
 from .config import config_values
-from .email import reset_password_message
+from .email import reset_password_message, smtp_check
 from .database import SessionLocal
 
 
@@ -50,6 +50,14 @@ def admin_check(db: Session, token: UUID):
 # Цикл работы
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print("Проверка работы SMTP сервера...")
+    config_values.correct_email = smtp_check(
+        host=config_values.EMAIL_DOMAIN,
+        port=config_values.EMAIL_PORT,
+        email=config_values.EMAIL,
+        use_tls=config_values.USE_TLS,
+        auth=True
+    )
     redis = aioredis.from_url(config_values.REDIS_URL, encoding="utf8", decode_responses=True)
     FastAPICache.init(RedisBackend(redis), prefix="project-city", coder=CacheCoder)
     yield
@@ -241,7 +249,11 @@ async def forgot_password(email: EmailStr, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email не занят")
     if not(db_user.email_verify):
         raise HTTPException(status_code=400, detail="Аккаунт не активирован")
-    return await reset_password_message(email=email, verify_token=db_user.verify_token)
+    if config_values.correct_email:
+        result = await reset_password_message(email=email, verify_token=db_user.verify_token)
+    else:
+        raise HTTPException(status_code=400, detail="SMTP сервер не работает")
+    return  result
 
 @app.post(
     "/api/v1/user/reset-password",
@@ -378,7 +390,7 @@ async def issue_create(issue: schemas.IssueCreate = Depends(), files: list[Uploa
     tags=["Проблемы", "Ограниченный доступ"]
 )
 async def issue_status(issue: schemas.IssueUpdate, db: Session = Depends(get_db)):
-    """Обновление статуса проблемы по её ID и ID пользователя"""
+    """Обновление статуса проблемы по её ID и ID пользователя (есть проблема, в обработке, выполнено)"""
     db_user = crud.get_user_by_token(db=db, token=issue.token)
     if db_user is None:
         raise HTTPException(status_code=400, detail="Пользователь не найден")
@@ -656,6 +668,23 @@ async def get_statistics_time(db: Session = Depends(get_db)):
 async def get_statistics_area(db: Session = Depends(get_db)):
     """Получение статистики о проблемах с сортировкой по местности"""
     return crud.get_statistics_area(db=db)
+
+@app.get(
+    "/api/v1/statistics/average-time",
+    response_model=schemas.StatisticAverage,
+    status_code=status.HTTP_200_OK,
+    summary="Среднее время выполнения",
+    responses={
+        200: {"description": "Статистика успешно получена"},
+        422: {"description": "Ошибка валидации полей"}
+    },
+    tags=["Статистика"]
+)
+@cache(expire=300)
+async def get_statistics_average(db: Session = Depends(get_db)):
+    """Получение статистики о среднем времени по выполнению проблем"""
+    return crud.get_statistics_average(db=db)
+
 
 # Технические запросы
 @app.get(

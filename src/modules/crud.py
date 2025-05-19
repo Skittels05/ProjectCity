@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import models, schemas, email
+from .config import config_values
 from .utils import get_password_hash
 
 static_path = Path(__file__).parent.parent / "uploads"
@@ -124,6 +125,27 @@ def get_statistics_area(db: Session) -> list[dict]:
         })
     return result
 
+def get_statistics_average(db: Session) -> dict:
+    """Функция для получения статистики по среднему времени решения проблем"""
+    time = db.query(
+        func.avg(models.Issue.updated_at - models.Issue.created_at)
+    ).filter(models.Issue.created_at != models.Issue.updated_at).scalar()
+    if time is None:
+        result = {
+            "days": 0,
+            "hours": 0,
+            "minutes": 0,
+            "seconds": 0
+        }
+    else:
+        result = {
+        "days": time.days,
+        "hours": time.seconds // 3600 % 24,
+        "minutes": time.seconds // 60 % 60,
+        "seconds": time.seconds % 60
+    }
+    return result
+
 
 # Работа с ролями
 def get_all_roles(db: Session):
@@ -150,13 +172,14 @@ async def create_user(db: Session, user: schemas.UserCreate) -> models.User:
         rating=0,
         created_at=datetime.now(),
         token=uuid4(),
-        email_verify=False,
+        email_verify=not(config_values.correct_email),
         verify_token=uuid4()
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    await email.send_verification_email(db_user.email, db_user.verify_token)
+    if config_values.correct_email:
+        await email.send_verification_email(db_user.email, db_user.verify_token)
     return db_user
 
 async def create_issue(db: Session, issue: schemas.IssueCreate, files) -> models.Issue:
@@ -267,7 +290,7 @@ async def update_issue(db: Session, issue: schemas.IssueUpdate):
     db_issue.status = issue.status
     db_issue.updated_at = datetime.now()
     db.commit()
-    if not(db_user is None):
+    if not(db_user is None) and config_values.correct_email:
         await email.send_notification_status(email=get_user_by_id(db=db, user_id=db_issue.user_id).email, issue=db_issue)
     if not(db_user is None):
         db.refresh(db_user)

@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:17
+    container_name: project-city-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ct
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:6-alpine
+    container_name: project-city-redis
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  city:
+    build: .
+    container_name: project-city-backend
+    environment:
+      DOMAIN: example.com
+      PORT: 8000
+      SSL_KEYFILE:
+      SSL_CERTFILE:
+      DATABASE_URL: postgresql://user:password@db:5432/ct
+      REDIS_URL: redis://redis:6379/0
+      EMAIL_DOMAIN: localhost
+      EMAIL_PORT: 587
+      EMAIL: noreply@localhost
+      EMAIL_PASSWORD: password
+      USE_TLS: False
+    volumes:
+      - backend_data:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+volumes:
+  db_data:
+  redis_data:
+  backend_data:

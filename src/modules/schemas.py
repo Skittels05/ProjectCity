@@ -413,6 +413,28 @@ class StatisticArea(BaseModel):
         description="Количество проблем"
     )
 
+class StatisticAverage(BaseModel):
+    days: int = Field(
+        default=...,
+        examples=[365],
+        description="Сколько в среднем дней затрачивается на решение проблемы"
+    )
+    hours: int = Field(
+        default=...,
+        examples=[23],
+        description="Сколько часов было затрачено на решение (меньше 24)"
+    )
+    minutes: int = Field(
+        default=...,
+        examples=[59],
+        description="Сколько минут было затрачено на решение (меньше 60)"
+    )
+    seconds: int = Field(
+        default=...,
+        examples=[59],
+        description="Сколько секунд было затрачено на решение (меньше 60)"
+    )
+
 
 class Request(BaseModel):
     token: UUID = Field(
